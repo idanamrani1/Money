@@ -2,12 +2,12 @@
 
 /* ---- Firebase ---- */
 const firebaseConfig = {
-  apiKey: "AIzaSyBiOp78xlg5ysvKhZ9UK0zFTv7zSmgey4g",
-  authDomain: "moneymanage-8963b.firebaseapp.com",
-  projectId: "moneymanage-8963b",
-  storageBucket: "moneymanage-8963b.firebasestorage.app",
-  messagingSenderId: "388008766113",
-  appId: "1:388008766113:web:3cbf7e961ac64e42ec1ee0"
+  apiKey: "AIzaSyAJWkLBFLJl1lPJ6YAGCZehuHykpYoH754",
+  authDomain: "badge-app-c835d.firebaseapp.com",
+  projectId: "badge-app-c835d",
+  storageBucket: "badge-app-c835d.firebasestorage.app",
+  messagingSenderId: "490738539348",
+  appId: "1:490738539348:web:0101d688742c2a01e746c1"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
