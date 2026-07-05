@@ -214,3 +214,8 @@ h1,h2,h3{ margin:0; font-weight:700; }
 .lg-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
 .lg-name{ flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .lg-val{ color:var(--muted); font-weight:600; white-space:nowrap; }
+
+/* ===== Couple code box ===== */
+.code-box{ background:var(--mint-soft); border:1.5px dashed var(--mint); border-radius:14px;
+  padding:14px; text-align:center; font-size:26px; font-weight:800; letter-spacing:6px;
+  color:#0c9e82; cursor:pointer; }
