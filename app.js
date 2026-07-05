@@ -120,10 +120,20 @@ function updAlloc(){
   el.className = "alloc-note" + (diff<0 ? " neg" : "");
   el.textContent = diff>=0 ? `נשארו ${fmt(diff)} ₪ לחלוקה` : `חילקתם ${fmt(-diff)} ₪ מעבר לתקציב`;
 }
+const DEFAULT_PRESETS = [
+  { id:"p1", name:"מים", amount:6, catId:"food", icon:"💧" },
+  { id:"p2", name:"קפה", amount:12, catId:"food", icon:"☕" },
+  { id:"p3", name:"חטיף", amount:8, catId:"food", icon:"🍫" },
+];
+
 function obFinish(){
-  state = { monthKey: mk(new Date()), totalBudget: draftTotal, limits: {...draftLimits}, transactions: [], history: [] };
+  state = { monthKey: mk(new Date()), totalBudget: draftTotal, limits: {...draftLimits},
+    transactions: [], history: [], presets: DEFAULT_PRESETS.map(p=>({...p})) };
   save(); render();
 }
+
+/* migrate old saved data that has no presets */
+if(state && !state.presets){ state.presets = DEFAULT_PRESETS.map(p=>({...p})); save(); }
 
 /* ===== home ===== */
 function homeHTML(){
@@ -215,6 +225,13 @@ function homeHTML(){
       <div class="pill"><div class="p-label">תנועות</div><div class="p-val">${state.transactions.length}</div></div>
     </div>
 
+    ${state.presets && state.presets.length ? `
+    <div class="section-head"><h3>הוצאה בלחיצה</h3><span class="link" onclick="setTab('settings')">עריכה</span></div>
+    <div class="preset-row">
+      ${state.presets.map(p=>`<div class="preset-chip" onclick="quickAdd('${p.id}')">
+        <span class="pc-ic">${p.icon}</span><span>${p.name}</span><b>${p.amount} ₪</b></div>`).join("")}
+    </div>` : ""}
+
     ${insights.join("")}
 
     <div class="section-head" style="margin-top:20px"><h3>קטגוריות</h3></div>
@@ -287,6 +304,22 @@ function settingsHTML(){
     </div>
     <div class="set-title">תקרה לכל קטגוריה (₪)</div>
     <div class="set-group">${rows}</div>
+    <div class="set-title">הוצאות בלחיצה (מים, קפה, קטנות...)</div>
+    <div class="set-group">
+      ${state.presets.map((p,i)=>`
+      <div class="set-row">
+        <span style="display:flex;gap:8px;align-items:center">
+          <input type="text" value="${p.icon}" style="width:44px" onchange="state.presets[${i}].icon=this.value||'💸'; save()">
+          <input type="text" value="${p.name}" style="width:90px;text-align:right" onchange="state.presets[${i}].name=this.value||'הוצאה'; save()">
+        </span>
+        <span style="display:flex;gap:8px;align-items:center">
+          <input type="number" inputmode="numeric" value="${p.amount}" style="width:66px" onchange="state.presets[${i}].amount=Number(this.value)||1; save()">
+          <span style="color:var(--red);cursor:pointer;padding:4px" onclick="state.presets.splice(${i},1); save(); render()">✕</span>
+        </span>
+      </div>`).join("")}
+      <div class="set-row" style="justify-content:center;color:var(--mint);font-weight:700;cursor:pointer"
+        onclick="state.presets.push({id:'p'+Date.now(),name:'חדש',amount:10,catId:'other',icon:'💸'}); save(); render()">+ הוסף הוצאה מהירה</div>
+    </div>
     <div class="set-title">שמות</div>
     <div class="set-group">
       <div class="set-row"><span>השם שלך</span>
@@ -380,6 +413,33 @@ function saveTx(){
   });
   save(); render();
 }
+let toastTimer = null;
+function quickAdd(pid){
+  const p = state.presets.find(x=>x.id===pid);
+  if(!p) return;
+  const tx = {
+    id: "t"+Date.now()+Math.random().toString(16).slice(2),
+    catId: p.catId, sub: null, amount: p.amount, label: p.name,
+    who: me.name, date: new Date().toISOString()
+  };
+  state.transactions.unshift(tx);
+  save(); render();
+  showToast(`${p.icon} ${p.name} - ${p.amount} ₪ נרשם`, tx.id);
+}
+function showToast(msg, txId){
+  const old = document.getElementById("toast"); if(old) old.remove();
+  clearTimeout(toastTimer);
+  const t = document.createElement("div");
+  t.id = "toast"; t.className = "toast";
+  t.innerHTML = `<span>${msg}</span><b onclick="undoTx('${txId}')">ביטול</b>`;
+  document.getElementById("app").appendChild(t);
+  toastTimer = setTimeout(()=>{ t.classList.add("out"); setTimeout(()=>t.remove(), 300); }, 3500);
+}
+function undoTx(id){
+  state.transactions = state.transactions.filter(x=>x.id!==id);
+  save(); render();
+}
+
 function delTx(id){
   const t = state.transactions.find(x=>x.id===id);
   if(!t) return;

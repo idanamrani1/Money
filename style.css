@@ -183,3 +183,23 @@ h1,h2,h3{ margin:0; font-weight:700; }
 .step-progress div.active{ background:var(--mint); }
 .alloc-note{ text-align:center; font-size:13px; color:var(--muted); margin-top:8px; }
 .alloc-note.neg{ color:var(--red); font-weight:600; }
+
+/* ===== Quick presets ===== */
+.preset-row{ display:flex; gap:9px; overflow-x:auto; padding:2px 2px 6px; margin-bottom:14px;
+  scrollbar-width:none; }
+.preset-row::-webkit-scrollbar{ display:none; }
+.preset-chip{ display:flex; align-items:center; gap:7px; background:var(--card); border-radius:30px;
+  padding:10px 16px; font-size:13.5px; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,.06);
+  cursor:pointer; border:1.5px solid transparent; flex-shrink:0; }
+.preset-chip:active{ border-color:var(--mint); background:var(--mint-soft); }
+.preset-chip .pc-ic{ font-size:16px; }
+.preset-chip b{ color:var(--mint); font-weight:800; }
+
+/* ===== Toast ===== */
+.toast{ position:fixed; bottom:150px; left:50%; transform:translateX(-50%); background:var(--navy);
+  color:#fff; border-radius:30px; padding:11px 18px; font-size:13.5px; display:flex; gap:14px;
+  align-items:center; z-index:60; box-shadow:0 10px 30px -8px rgba(0,0,0,.4); white-space:nowrap;
+  animation: toast-in .25s ease; }
+.toast b{ color:#5ee6c8; cursor:pointer; font-weight:700; }
+.toast.out{ opacity:0; transition:opacity .3s; }
+@keyframes toast-in{ from{ opacity:0; transform:translate(-50%, 10px);} to{ opacity:1; transform:translate(-50%,0);} }
