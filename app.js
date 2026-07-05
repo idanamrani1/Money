@@ -63,11 +63,47 @@ function render(){
   const root = document.getElementById("app");
   if(!me || !state){ root.innerHTML = onboardHTML(); return; }
   ensureMonth();
+  applyRecurring();
   let inner = "";
   if(tab==="home") inner = homeHTML();
   else if(tab==="history") inner = historyHTML();
   else inner = settingsHTML();
   root.innerHTML = inner + navHTML() + sheetHTML();
+}
+
+/* ===== SVG donut chart ===== */
+const CAT_CHART_COLORS = { fuel:"#e8a33d", food:"#17c3a2", clothing:"#7b8fe0", bills:"#e5604c",
+  fun:"#c17bd6", health:"#5bbf7a", home:"#a5a08a", other:"#9aa3ab" };
+function donutHTML(spentBy){
+  const entries = Object.entries(spentBy).filter(([,v])=>v>0);
+  const total = entries.reduce((s,[,v])=>s+v,0);
+  if(!total) return "";
+  const R = 54, CX = 70, CY = 70, C = 2*Math.PI*R;
+  let offset = 0;
+  const segs = entries.map(([id,v])=>{
+    const frac = v/total;
+    const seg = `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none"
+      stroke="${CAT_CHART_COLORS[id]||"#ccc"}" stroke-width="22"
+      stroke-dasharray="${(frac*C).toFixed(1)} ${C.toFixed(1)}"
+      stroke-dashoffset="${(-offset*C).toFixed(1)}"
+      transform="rotate(-90 ${CX} ${CY})"/>`;
+    offset += frac;
+    return seg;
+  }).join("");
+  const legend = entries.sort((a,b)=>b[1]-a[1]).map(([id,v])=>{
+    const c = catOf(id);
+    return `<div class="lg-row"><span class="lg-dot" style="background:${CAT_CHART_COLORS[id]||"#ccc"}"></span>
+      <span class="lg-name">${c?c.icon+" "+c.name:id}</span>
+      <span class="lg-val">${fmt(v)} ₪ · ${Math.round(v/total*100)}%</span></div>`;
+  }).join("");
+  return `<div class="donut-wrap">
+    <svg viewBox="0 0 140 140" class="donut">
+      ${segs}
+      <text x="${CX}" y="${CY-4}" text-anchor="middle" class="donut-total">${fmt(total)}</text>
+      <text x="${CX}" y="${CY+14}" text-anchor="middle" class="donut-sub">₪ סה"כ</text>
+    </svg>
+    <div class="donut-legend">${legend}</div>
+  </div>`;
 }
 
 /* ===== onboarding ===== */
@@ -134,6 +170,30 @@ function obFinish(){
 
 /* migrate old saved data that has no presets */
 if(state && !state.presets){ state.presets = DEFAULT_PRESETS.map(p=>({...p})); save(); }
+if(state && !state.recurring){ state.recurring = []; save(); }
+
+/* ===== recurring expenses: auto-apply once per month when day arrives ===== */
+function applyRecurring(){
+  if(!state || !state.recurring || !state.recurring.length) return;
+  const today = new Date().getDate();
+  let changed = false;
+  state.recurring.forEach(r=>{
+    const already = state.transactions.some(t=>t.recId===r.id);
+    if(!already && today >= r.day){
+      state.transactions.push({
+        id: "t"+Date.now()+Math.random().toString(16).slice(2),
+        recId: r.id, catId: r.catId, sub:null, amount: r.amount,
+        label: r.name + " (קבוע)", who: "אוטומטי",
+        date: new Date(new Date().getFullYear(), new Date().getMonth(), r.day, 8).toISOString()
+      });
+      changed = true;
+    }
+  });
+  if(changed){
+    state.transactions.sort((a,b)=> new Date(b.date) - new Date(a.date));
+    save();
+  }
+}
 
 /* ===== home ===== */
 function homeHTML(){
@@ -201,6 +261,18 @@ function homeHTML(){
     if(top){ const c = catOf(top[0]);
       insights.push(`<div class="insight"><div class="i-ic">${c.icon}</div><div class="i-txt">הקטגוריה עם הכי הרבה הוצאות החודש: <b>${c.name}</b> - ${fmt(top[1])} ₪.</div></div>`);
     }
+    /* comparison to previous month, pace-adjusted */
+    const prev = state.history[0];
+    if(prev && prev.totalSpent>0){
+      const prevPace = prev.totalSpent * (day/dim);
+      const diff = spent - prevPace;
+      const pctDiff = Math.round(Math.abs(diff)/prevPace*100);
+      if(pctDiff >= 5){
+        insights.push(`<div class="insight"><div class="i-ic">${diff<0?"👏":"👀"}</div><div class="i-txt">${diff<0
+          ? `אתם מוציאים <b>${pctDiff}% פחות</b> מאשר בשלב הזה ב${mkLabel(prev.monthKey).split(" ")[0]}.`
+          : `אתם מוציאים <b>${pctDiff}% יותר</b> מאשר בשלב הזה ב${mkLabel(prev.monthKey).split(" ")[0]}.`}</div></div>`);
+      }
+    }
   }
 
   return `<div class="screen">
@@ -265,6 +337,7 @@ function historyHTML(){
     const diff = h.totalBudget - h.totalSpent;
     const open = expandedMonth===i;
     const breakdown = open ? `<div class="month-breakdown">
+      ${donutHTML(h.spentBy)}
       ${CATEGORIES.filter(c=>h.spentBy[c.id]).map(c=>`
         <div class="mb-row"><span>${c.icon} ${c.name}</span><span>${fmt(h.spentBy[c.id])} ₪ מתוך ${fmt(h.limits[c.id]||0)}</span></div>`).join("")}
       <div class="mb-row" style="font-weight:700;border-top:1px solid var(--line);padding-top:7px">
@@ -277,9 +350,13 @@ function historyHTML(){
       </div>${breakdown}</div>`;
   }).join("") : `<div class="empty-note">עוד אין חודשים קודמים.<br>בתחילת החודש הבא, החודש הנוכחי יישמר כאן אוטומטית.</div>`;
 
+  const curBy = {}; state.transactions.forEach(t=>curBy[t.catId]=(curBy[t.catId]||0)+t.amount);
+  const curDonut = donutHTML(curBy);
+
   return `<div class="screen">
     <div class="topbar"><div class="month-title">היסטוריה</div></div>
     <div class="section-head"><h3>החודש הנוכחי - ${mkLabel(state.monthKey)}</h3></div>
+    ${curDonut ? `<div class="month-card" style="cursor:default">${curDonut}</div>` : ""}
     <div class="tx-list" style="margin-bottom:24px">${curTx}</div>
     <div class="section-head"><h3>חודשים קודמים</h3></div>
     ${past}
@@ -304,6 +381,30 @@ function settingsHTML(){
     </div>
     <div class="set-title">תקרה לכל קטגוריה (₪)</div>
     <div class="set-group">${rows}</div>
+    <div class="set-title">הוצאות קבועות (נכנסות אוטומטית כל חודש)</div>
+    <div class="set-group">
+      ${state.recurring.length ? state.recurring.map((r,i)=>`
+      <div class="set-row" style="flex-wrap:wrap;gap:8px">
+        <span style="display:flex;gap:8px;align-items:center;flex:1;min-width:0">
+          <input type="text" value="${r.name}" style="width:104px;text-align:right"
+            onchange="state.recurring[${i}].name=this.value||'קבוע'; save()">
+          <select onchange="state.recurring[${i}].catId=this.value; save()"
+            style="padding:8px;border-radius:10px;border:1.5px solid var(--line);background:var(--bg);font-family:'Heebo';font-size:13px">
+            ${CATEGORIES.map(c=>`<option value="${c.id}" ${r.catId===c.id?"selected":""}>${c.icon} ${c.name}</option>`).join("")}
+          </select>
+        </span>
+        <span style="display:flex;gap:8px;align-items:center">
+          <input type="number" inputmode="numeric" value="${r.amount}" style="width:70px"
+            onchange="state.recurring[${i}].amount=Number(this.value)||1; save()">
+          <span style="font-size:12px;color:var(--muted)">ביום</span>
+          <input type="number" inputmode="numeric" value="${r.day}" min="1" max="28" style="width:52px"
+            onchange="state.recurring[${i}].day=Math.min(28,Math.max(1,Number(this.value)||1)); save()">
+          <span style="color:var(--red);cursor:pointer;padding:4px" onclick="delRecurring(${i})">✕</span>
+        </span>
+      </div>`).join("") : `<div class="set-row" style="color:var(--muted);font-size:13px">אין עדיין - למשל: שכירות, חשמל, ספוטיפיי</div>`}
+      <div class="set-row" style="justify-content:center;color:var(--mint);font-weight:700;cursor:pointer"
+        onclick="state.recurring.push({id:'r'+Date.now(),name:'חדש',amount:100,catId:'bills',day:1}); save(); render()">+ הוסף הוצאה קבועה</div>
+    </div>
     <div class="set-title">הוצאות בלחיצה (מים, קפה, קטנות...)</div>
     <div class="set-group">
       ${state.presets.map((p,i)=>`
@@ -330,6 +431,14 @@ function settingsHTML(){
     <button class="danger-btn" onclick="resetAll()">איפוס מלא של האפליקציה</button>
   </div>`;
 }
+function delRecurring(i){
+  const r = state.recurring[i];
+  if(!confirm(`למחוק את "${r.name}"? ההוצאה שכבר נרשמה החודש תימחק גם.`)) return;
+  state.transactions = state.transactions.filter(t=>t.recId!==r.id);
+  state.recurring.splice(i,1);
+  save(); render();
+}
+
 function resetAll(){
   if(confirm("בטוח? כל הנתונים וההיסטוריה יימחקו לצמיתות.")){
     localStorage.removeItem(DATA_KEY); localStorage.removeItem(USER_KEY);
