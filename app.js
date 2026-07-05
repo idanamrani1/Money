@@ -69,16 +69,16 @@ function upd(patch){ if(docRef) docRef.update(patch).catch(e=>console.error(e));
 function connect(code){
   if(unsub) unsub();
   docRef = db.collection("budgets").doc(code);
-  unsub = docRef.onSnapshot(snap=>{
+  unsub = docRef.onSnapshot({ includeMetadataChanges:false }, snap=>{
     if(!snap.exists){
-      if(me && me.code === code){ me = null; saveMe(); localStorage.removeItem(USER_KEY); }
+      /* doc not there yet (may still be pending write) - keep waiting screen */
       state = null; render(); return;
     }
     state = snap.data();
     ensureMonth();
     applyRecurring();
     render();
-  }, err=>{ console.error(err); });
+  }, err=>{ console.error(err); alert("שגיאת חיבור: "+err.message); });
 }
 
 /* ---- month rollover (first device to open in a new month archives) ---- */
@@ -218,7 +218,7 @@ function updAlloc(){
   el.className = "alloc-note" + (diff<0 ? " neg" : "");
   el.textContent = diff>=0 ? `נשארו ${fmt(diff)} ₪ לחלוקה` : `חילקתם ${fmt(-diff)} ₪ מעבר לתקציב`;
 }
-async function createBudget(){
+function createBudget(){
   draftTotal = Number(document.getElementById("obTotal").value)||draftTotal||0;
   const code = newCode();
   const doc = {
@@ -231,11 +231,12 @@ async function createBudget(){
     recurring: [],
     members: [draftName]
   };
-  try{
-    await db.collection("budgets").doc(code).set(doc);
-    me = { name: draftName, code }; saveMe();
-    connect(code);
-  }catch(e){ alert("שגיאה ביצירה: "+e.message); }
+  me = { name: draftName, code }; saveMe();
+  /* fire-and-forget: local persistence renders instantly, server syncs in background */
+  db.collection("budgets").doc(code).set(doc)
+    .catch(e=>{ alert("שגיאת התחברות ל-Firebase: "+e.message+"\n\nבדקו ש-Firestore Database נוצר בפרויקט."); });
+  connect(code);
+  render();
 }
 async function joinBudget(){
   const code = (document.getElementById("joinCode").value||"").trim().toUpperCase();
